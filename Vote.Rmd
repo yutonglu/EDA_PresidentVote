@@ -1,0 +1,293 @@
+---
+title: "President Candidate: Switching from Obama to Trump"
+date: "11/20/2019"
+output: pdf_document
+---
+
+```{r,message=FALSE,echo=FALSE, warning = FALSE}
+library(tidyverse)
+library(modelr)
+library(ggplot2)
+library(gridExtra)
+library(plyr)
+library(reshape)
+library(tidyr)
+library(car)
+library(arm)
+library(knitr)
+library(grid)
+knitr::opts_chunk$set(echo = TRUE, tidy = TRUE)
+cb_palette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+```
+
+```{r setup, include=FALSE, warning = FALSE}
+load("CCES16_Common_OUTPUT_Feb2018_VV.RData")
+Obama = data.frame(weights.post = x$commonweight_vv_post, tookpost = x$tookpost, gender = x$gender, educ = x$educ, race = x$race, party = x$pid7, vote.2012 = x$CC16_326, vote.2016 = x$CC16_410a, give.legal.tax = x$CC16_331_1, increase.patrol = x$CC16_331_2, give.legal.graduate = x$CC16_331_3, deport.illegal = x$CC16_331_7)
+
+Obama = subset(Obama, tookpost == "Yes" & vote.2012 == "Barack Obama")
+Obama$Trump = ifelse(Obama$vote.2016 == "Donald Trump (Republican)", "Yes", "No")
+Obama$Trump[is.na(Obama$Trump)] ="No"
+Obama$race = recode(Obama$race, "'White'='White'; 'Black'='Black'; 'Hispanic' = 'Hispanic'; else='Other'")
+
+Obama$give.legal.tax = ifelse(Obama$give.legal.tax=="Yes",1,0)
+Obama$increase.patrol = ifelse(Obama$increase.patrol=="No",1,0)
+Obama$give.legal.graduate = ifelse(Obama$give.legal.graduate=="Yes",1,0)
+Obama$deport.illegal = ifelse(Obama$deport.illegal=="No",1,0)
+Obama$pro.immigration=Obama$give.legal.tax+Obama$increase.patrol+Obama$give.legal.graduate+Obama$deport.illegal
+Obama$educ.num = ifelse (Obama$educ=="No HS",1,ifelse (Obama$educ=="High school graduate",2,ifelse(Obama$educ=="Some college",3, ifelse(Obama$educ=="2-year",4,ifelse(Obama$educ=="4-year",5,ifelse(Obama$educ=="Post-grad",6,0))))))
+
+Obama$party.num = ifelse (Obama$party=="Strong Democrat",1,ifelse (Obama$party=="Not very strong Democrat",2,ifelse(Obama$party=="Lean Democrat",3,ifelse(Obama$party=="Lean Republican",5,ifelse(Obama$party=="Not very strong Republican",6,ifelse(Obama$party=="Strong Republican",7,4))))))
+Obama$Trump = as.factor(Obama$Trump)
+Obama$gender = factor(Obama$gender, ordered = FALSE)
+```
+
+# Research Question
+
+To what extent do attitudes toward immigration explain the switching of votes of 2012 Obama supporters who became 2016 Trump supporters?
+
+
+# Introduction
+
+We explore the relationship between the probability of switching polls from one party to another and various demographic groups as well as their immigration attitude. We are using the data during the 2016 U.S. presidential campaign and specifically focus on the group of people initially vote for Obama but then switch to Trump. We find there is some distinct pattern for a different group of people, and some of them are more likely to change their votes than others. Immigration attitude has a significant difference through the various groups, though the details vary substantially from groups to groups.
+
+## Interaction between immigration attitude and demographic variables
+
+```{r echo = FALSE}
+#Gender & immigration
+weighted.gender.logit.no.interaction = glm(Trump ~ gender + pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+weighted.gender.logit.yes.interaction = glm(Trump ~ gender * pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+
+#Education & immigration
+weighted.educ.logit.no.interaction = glm(Trump ~ educ.num + pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+weighted.educ.logit.yes.interaction = glm(Trump ~ educ.num * pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+
+#Race & immigration
+weighted.race.logit.no.interaction = glm(Trump ~ race + pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+weighted.race.logit.yes.interaction = glm(Trump ~ race * pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+
+#Party & immigration
+weighted.party.logit.no.interaction = glm(Trump ~ party.num + pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+weighted.party.logit.yes.interaction = glm(Trump ~ party.num * pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+```
+
+##### Gender & Immigration Attitude
+
+```{r echo = FALSE,fig.width=8}
+gender.df = expand.grid(pro.immigration = 0:4, gender = Obama$gender)
+gender.pred = predict(weighted.gender.logit.yes.interaction, type = "response", newdata = gender.df)
+gender.pred.df = data.frame(gender.df, Trump = as.vector(gender.pred))
+
+gender.pred.no = predict(weighted.gender.logit.no.interaction, type = "response", newdata = gender.df)
+gender.pred.no.df = data.frame(gender.df, Trump = as.vector(gender.pred.no))
+
+gender.plot.no = ggplot(gender.pred.no.df, aes(x = pro.immigration, y = Trump,
+                         group = gender, color = gender)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Gender") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Gender Without Interaction") + scale_color_manual(values = cb_palette) + theme(plot.title = element_text(size=9))
+
+gender.plot.yes = ggplot(gender.pred.df, aes(x = pro.immigration, y = Trump,
+                         group = gender, color = gender)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Gender") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Gender With Interaction") + scale_color_manual(values = cb_palette) + theme(plot.title = element_text(size=9))
+
+grid.arrange(gender.plot.no, gender.plot.yes, ncol=2, nrow = 1) 
+```
+
+As seen in the graphs above, gender doesn't seem to play a role in switching from Obama to Trump since both genders have the same response to the increase in pro-immigration scores. There is almost a convergence at the level of the pro-immigration score of 4, meaning that when both genders fixed at the highest magnitude of pro-immigration, the probability of switching is almost the same at right below 0.05. Also, it seems like the interaction effect between gender and immigration score does not exist at all as the probabilities of switching with no interaction are the same for each pro-immigration score as the probability of switching with interaction.  
+
+##### Education & Immigration Attitude
+
+```{r echo = FALSE}
+educ.df = expand.grid(pro.immigration = 0:4, educ.num = 1:6)
+educ.pred = predict(weighted.educ.logit.yes.interaction, type = "response", newdata = educ.df)
+educ.pred.df = data.frame(educ.df, Trump = as.vector(educ.pred))
+
+educ.pred.no = predict(weighted.educ.logit.no.interaction, type = "response", newdata = educ.df)
+educ.pred.no.df = data.frame(educ.df, Trump = as.vector(educ.pred.no))
+
+educ.plot.no = ggplot(educ.pred.no.df, aes(x = pro.immigration, y = Trump,
+                         group = educ.num, color = educ.num)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Education") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Education Without Interaction") + theme(plot.title = element_text(size=9))
+
+educ.plot.yes = ggplot(educ.pred.df, aes(x = pro.immigration, y = Trump,
+                         group = educ.num, color = educ.num)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Education") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Education With Interaction") + theme(plot.title = element_text(size=9))
+
+grid.arrange(educ.plot.no, educ.plot.yes, ncol = 2, nrow = 1) 
+```
+
+In the model without interactions, the trends for the six education levels indicate a generic downward trend. The lowest education of 1, representing the "No HS," shows the highest probability of switching while the highest education of 6, representing "Post-grad," shows the lowest probability of switching. However, once we introduce the interactions, we realize that the trends for education levels change the order among themselves. For instance, up to the pro-immigration score around 1, post-graduates (education=6) constitute the group that is most likely to switch from Obama to Trump, whereas respondents without a high school diploma (education=1) are the least likely to switch within the same pro-immigration attitudinal dimension. However, the order of two groups is switched after the pro-immigration score about 1, as the probability of switching is higher for respondents without a high school diploma than post-graduates. Among respondents holding the highest level of pro-immigration attitudes (pro-immigration=4), the respondents without a high school diploma constitute the group with the highest likelihood of switching than any other group for the educational level, whereas the respondents with post-graduate degree are the least likely to do so. Overall, the patterns indicate substantive interaction effects for the education level and pro-immigration attitudes on the probability of switching from Obama to Trump.   
+
+\newpage
+
+##### Race & Immigration Attitude
+
+```{r echo = FALSE}
+race.df = expand.grid(pro.immigration = 0:4, race = Obama$race)
+race.pred = predict(weighted.race.logit.yes.interaction, type = "response", newdata = race.df)
+race.pred.df = data.frame(race.df, Trump = as.vector(race.pred))
+
+race.pred.no = predict(weighted.race.logit.no.interaction, type = "response", newdata = race.df)
+race.pred.no.df = data.frame(race.df, Trump = as.vector(race.pred.no))
+
+race.plot.no = ggplot(race.pred.no.df, aes(x = pro.immigration, y = Trump,
+                         group = race, color = race)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Race") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Race Without Interaction") + scale_color_manual(values = cb_palette) + theme(plot.title = element_text(size=9))
+
+race.plot.yes = ggplot(race.pred.df, aes(x = pro.immigration, y = Trump,
+                         group = race, color = race)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Race") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Race With Interaction") + scale_color_manual(values = cb_palette) + theme(plot.title = element_text(size=9))
+
+grid.arrange(race.plot.no, race.plot.yes, ncol = 2, nrow = 1)
+```
+\hspace{5mm}
+As we can see from the above graphs, race does play some role in switching from Obama to Trump because there is some noticeable change of the slope when we put the interaction of race and attitude into our model. From the 'without interaction' plot, we see that the White group has the highest probability of switching, followed by the Hispanic, Other, and Black, in order. Overall, we can see a drastic drop in all four groups in terms of the probability of switching. When we introduce interaction, the trends remain the same in a way that the order is still White -> Hispanic -> Other -> Black. However, it seems like the slopes look pretty different. For example, Hispanic and other groups are a lot more closely in terms of switching probability at around 32%. Also, White and Hispanic almost pretty much converge at the pro-immigration score of 4. To see the difference between the two plots, we demonstrate the following plot.   
+
+```{r echo = FALSE, warning = FALSE,fig.height=4}
+ggplot(race.pred.df, aes(x=pro.immigration, y=Trump, group = race, color = race)) +
+      geom_line() + geom_line(data = race.pred.no.df, linetype = "longdash", aes(x=pro.immigration, y = Trump, group = race, color = race)) + ggtitle("Race: Interaction and No-Interaction On Top of Each Other") + scale_color_manual(values = cb_palette) + theme(plot.title = element_text(size=12)) + labs(caption = "Dashed = Without Interaction , Solid = With Interaction") + theme(plot.caption =element_text(hjust=1))
+```
+
+The interaction and without interaction lines are now on top of each other to demonstrate the difference more clearly. We are able to confirm that the slopes are off for each race. Therefore, it seems like there is at least some kind of interaction effect between race and immigration score. 
+
+##### Party & Immigration Attitude
+```{r,echo = FALSE,fig.height=4}
+#party & immigration
+party.df = expand.grid(pro.immigration = 0:4, party.num = 1:7)
+party.pred = predict(weighted.party.logit.yes.interaction, type = "response", newdata = party.df)
+party.pred.df = data.frame(party.df, Trump = as.vector(party.pred))
+
+party.pred.no = predict(weighted.party.logit.no.interaction, type = "response", newdata = party.df)
+party.pred.no.df = data.frame(party.df, Trump = as.vector(party.pred.no))
+
+party.plot.no = ggplot(party.pred.no.df, aes(x = pro.immigration, y = Trump,
+                         group = party.num, color = party.num)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Party") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Party Identification Without Interaction") + theme(plot.title = element_text(size=9))
+
+party.plot.yes = ggplot(party.pred.df, aes(x = pro.immigration, y = Trump,
+                         group = party.num, color = party.num)) + geom_line() +
+  xlab("Pro-Immigration") + ylab("Probability of Switching") +
+  labs(color = "Party") + ggtitle("CCES 2016: Proportion of Switching from 
+Obama to Trump by Party Identification With Interaction") + theme(plot.title = element_text(size=9))
+
+grid.arrange(party.plot.no, party.plot.yes, ncol = 2, nrow = 1) 
+```
+
+Without interaction and as strongly expected, the "Strong Republican" group shows the highest probability of switching, and the "Strong Democrat" group shows the lowest probability of changing where the difference looks pretty significant. (About 88% for strong republican people and below 20% for strong democratic people when the score is 0). When you introduce the interaction, nothing significant seems to be found. The patterns are the same, and probabilities remain almost the same. Thus, no interaction between pro-immigration scores and party identification is needed.   
+
+\hspace{4mm}
+
+
+## Difference of Immigration attitude involved into selected demographic groups.
+
+#### Model Without Immigration Attitude
+```{r echo = FALSE}
+demographic.model.no.interaction = glm(Trump ~ gender + educ.num + race + party.num, family = quasibinomial, weights = weights.post, data = Obama)
+demographic.model.yes.interaction = glm(Trump ~ gender + educ.num + race + party.num + pro.immigration + educ.num:pro.immigration + race:pro.immigration, family = quasibinomial, weights = weights.post, data = Obama)
+
+df1 = data.frame(coefficients(demographic.model.no.interaction))
+df2 = data.frame(coefficients(demographic.model.yes.interaction))
+
+colnames(df1) = c("Coefficients of the Model Without Immigration Attitude (Model 1)")
+rownames(df1) = c("Intercept", "Male -> Female", "Education", "Hispanic", "Other", "White", "Party")
+kable(signif(df1, 3), digits=3)
+```
+
+
+\hspace{3mm}
+
+#### Model With Immigration Attitude
+```{r,echo=FALSE}
+colnames(df2) = c("Coefficients of the Model With Immigration Attitude and Interactions (Model 2)")
+rownames(df2) = c("Intercept", "Male -> Female", "Education", "Hispanic", "Other", "White", "Party", "Pro-Immigration", "Education & Pro-Immigration", "Hispanic & Pro-Immigration", "Other & Pro-Immigration", "White & Pro-Immigration")
+kable(signif(df2, 3), digits=3)
+```
+
+
+### Visualization of the Model Without Immigration Attitude (Model 1)
+```{r,warning=FALSE,message=FALSE, echo = FALSE, fig.height=7,fig.width=14}
+no.interaction.male = expand.grid(gender="Male", party.num = 1:7, race = Obama$race, educ.num=1:6)
+no.interaction.male.pred = predict(demographic.model.no.interaction, type = "response", newdata = no.interaction.male)
+no.interaction.male.pred.df = data.frame(no.interaction.male, Trump = as.vector(no.interaction.male.pred))
+
+no.interaction.male.plot = ggplot(no.interaction.male.pred.df, aes(x = educ.num, y = Trump, group = race, color = race)) + geom_line()+facet_grid(~party.num) +xlab("Education") + ylab("Probability of Switching") + ggtitle("Male") + theme(plot.title = element_text(size = 13)) + theme(plot.title = element_text(hjust = 0.5))
+
+no.interaction.female = expand.grid(gender="Female", party.num = 1:7, race = Obama$race, educ.num=1:6)
+no.interaction.female.pred = predict(demographic.model.no.interaction, type = "response", newdata = no.interaction.female)
+no.interaction.female.pred.df = data.frame(no.interaction.female, Trump = as.vector(no.interaction.female.pred))
+
+no.inteaction.female.plot = ggplot(no.interaction.female.pred.df, aes(x = educ.num, y = Trump, group = race, color = race)) + geom_line()+facet_grid(~party.num) +xlab("Education") + ylab("Probability of Switching") + ggtitle("Female") + theme(plot.title = element_text(size = 13)) + theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(no.interaction.male.plot, no.inteaction.female.plot, ncol = 2, nrow = 1, top = textGrob("CCES 2016: Probability of Switching From Obama to Trump by Party Without Immigration Attitude"))
+```
+
+As we can see from the above plot, there is nothing newly interesting is demonstrated from the above plots. All the trends (slopes) match the findings from the previous part 2. Males are slightly more likely to switch than females overall. Whites are more likely to switch, followed by Hispanics, Others, and Blacks in order. The more you are Republican and the more you are likely to switch. The higher the degree of education, the less you are likely to switch. We can now compare this with the case where the immigration attitude kicks in.
+
+
+### Visualization of the Model With Immigration Attitude and Interactions (Model 2)
+```{r,warning=FALSE,message=FALSE, echo = FALSE, fig.height=8,fig.width=10}
+yes.interaction.df1 = expand.grid(gender="Male", party.num = 1, race = Obama$race, educ.num=1:6,pro.immigration=0:4)
+yes.interaction.pred1 = predict(demographic.model.yes.interaction, type = "response", newdata = yes.interaction.df1)
+yes.interaction.pred.df1 = data.frame(yes.interaction.df1, Trump = as.vector(yes.interaction.pred1))
+
+g1 = ggplot(yes.interaction.pred.df1, aes(x = pro.immigration, y = Trump, group = race, color = race)) + geom_line()+facet_grid(~educ.num)+xlab("Pro-Immigration") + ylab("Probability of Switching") + ggtitle("Strong Democrat of by Education Level") + theme(plot.title = element_text(size = 9))+ylim(0,0.9) + theme(plot.title = element_text(hjust = 0.5))
+
+
+yes.interaction.df2 = expand.grid(gender="Male", party.num = 3, race = Obama$race, educ.num=1:6,pro.immigration=0:4)
+yes.interaction.pred2 = predict(demographic.model.yes.interaction, type = "response", newdata = yes.interaction.df2)
+yes.interaction.pred.df2 = data.frame(yes.interaction.df2, Trump = as.vector(yes.interaction.pred2))
+
+g2 = ggplot(yes.interaction.pred.df2, aes(x = pro.immigration, y = Trump, group = race, color = race)) + geom_line()+facet_grid(~educ.num)+xlab("Pro-Immigration") + ylab("Probability of Switching") + ggtitle("Lean Democrat by Education Level") + theme(plot.title = element_text(size = 9))+ylim(0,0.9) + theme(plot.title = element_text(hjust = 0.5))
+
+
+yes.interaction.df3 = expand.grid(gender="Male", party.num = 5, race = Obama$race, educ.num=1:6,pro.immigration=0:4)
+yes.interaction.pred3 = predict(demographic.model.yes.interaction, type = "response", newdata = yes.interaction.df3)
+yes.interaction.pred.df3 = data.frame(yes.interaction.df3, Trump = as.vector(yes.interaction.pred3))
+
+g3 = ggplot(yes.interaction.pred.df3, aes(x = pro.immigration, y = Trump, group = race, color = race)) + geom_line()+facet_grid(~educ.num)+xlab("Pro-Immigration") + ylab("Probability of Switching") + ggtitle("Lean Rebuplican by Education Level") + theme(plot.title = element_text(size = 9))+ylim(0,0.9) + theme(plot.title = element_text(hjust = 0.5))
+
+
+yes.interaction.df5 = expand.grid(gender="Male", party.num = 7, race = Obama$race, educ.num=1:6,pro.immigration=0:4)
+yes.interaction.pred5 = predict(demographic.model.yes.interaction, type = "response", newdata = yes.interaction.df5)
+yes.interaction.pred.df5 = data.frame(yes.interaction.df3, Trump = as.vector(yes.interaction.pred5))
+
+g4 = ggplot(yes.interaction.pred.df5, aes(x = pro.immigration, y = Trump, group = race, color = race)) + geom_line()+facet_grid(~educ.num)+xlab("Pro-Immigration") + ylab("Probability of Switching") + ggtitle("Strong Republican by Education Level") + theme(plot.title = element_text(size = 9))+ylim(0,0.9) + theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(g1,g4,g2,g3, ncol = 2, nrow = 2, top = "CCES 2016: Probability of Switching from Obama to Trump With Immigration Attitude and Interactions") 
+```
+Finding that Gender barely affects the probability of switching from the previous plots and coefficient table (-0.210 before interaction and -0.213 after interaction), we arbitrary fix the gender variable to __male__ and examine the likelihood of switching for some meaningful party demographic groups such as __Strong Democrats__, __Lean Democrats__, __Lean Republicans__, and __Strong Republicans__ based on pro-immigration scores, different racial groups, and stratified by education levels.
+
+We observe that among strong democrats, the influence of immigration remains relatively low and consistent across different educational levels. Among Strong Democrats, white respondents tend to be more influenced by their predispositions towards immigration for switching from Obama to Trump compared to the other racial groups. However, overall, the probabilities of switching for all racial groups exhibit a trend towards almost 0 for the respondents who are very supportive of immigration.
+
+Similarly, among lean democrats, we observe a consistent pattern for the role of attitudes towards immigration on the probability of switching from Obama to Trump across different educational levels. However, the probability of switching across all educational levels appear to be higher among Lean Democrats when compared to Strong Democrats. Among Lean Democrats, we observe that again. The white respondents have noticeably higher likelihoods of switching compared to racial groups within the whole span of four levels of immigration scores for all educational levels. We also observe that there is a downward trend for the probability of switching as the respondents become more pro-immigration in their attitudes.
+
+Lean republicans who support immigration seem to be less likely to switch compared to those who are less supportive of immigration. As the education level increases, the probability of switching decreases faster, overall, the racial groups, as the pro-immigration score increases. Lean Republicans are less likely to switch compared to strong republicans with similar education levels and immigration attitudes. Similar to the other party leanings and education levels, whites have the highest probability of switching comparing to the other races, followed by Hispanics, others, and blacks, in this order.
+
+Strong republicans demonstrate interesting but expected changes in slope trends. Unlike the other three party identifications, when they are the least pro-immigration, their probability of switching is as high as about 75~85% for all racial groups. As expected, we observe a decrease in this probability as the pro-immigration score increases; however, the probability of switching is still above 50% for the low-educated whites and Hispanics even for those who support immigration. As the education level increases, the probability of switching decreases much more rapidly as the pro-immigration score increases. However, it is still higher than the democrats and lean republicans with similar education levels and pro-immigration attitudes. The most interesting part is that this is for the first time we observe that the Hispanic group shows the highest probability of switching among all the racial groups when their education levels are above "some college" degree and when they are the least pro-immigration.
+
+## Conclusion
+
+**Interaction among different groups of demographic variables:** There is no obvious difference among males and females in switching from Obama to Trump, and same for the party, different party identification does not play an important role in the probability of switching. However, for the different levels of education group, the probability they will switch is different, the higher educated people, the lower the probability they will switch from one group to another. Same as different races, the probability of switching is varied when the interaction of immigration attitude involved.
+
+**Difference of Immigration attitude involved into selected demographic groups:** Overall, these results indicate that immigration attitudes make a substantive difference, and immigration attitudes matter the most for the white group and moderately strong for Hispanic as we observed from the last plots, whereas they matter the least for the blacks. The influence of immigration attitudes appear consistent across different educational levels, yet the influence matters much more salient among lean democrats and lean republicans as opposed to strong democrats and strong republicans as well as the higher educated people as opposed to lower educated people.
+
+
+
+
+
+
+
+
+
